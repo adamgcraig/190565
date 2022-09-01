@@ -43,17 +43,58 @@ v = vr+(vpeak-vr)*rand(N,1); %initial distribution
 v_ = v; %These are just used for Euler integration, previous time step storage
 
 %% User has to supply supervisor signal, zx
-zx = vz;
+% supervisor signal loading code added by A. Craig, 2022-08-26
+S = load('E:\HCP_data\fMRI\100206_ROI_ts.mat');
+original_fmri_ts = S.ROI_ts{1};
+original_nt = size(original_fmri_ts,2);
+zx = spline( linspace(0,T,original_nt), original_fmri_ts, linspace(0,T,nt) );
+% end of supervisor signal loading code
 dd = size(zx); 
 m1 = dd(1);
 m2 = 32; %number of upstates in the supervisor signal duration of 5 seconds.  100 per second.  
 zx = zx/(max(max(zx)));
 zx(isnan(zx)==1)=0; 
 %% generate HDTS signal  
-temp1 = abs(sin(m2*pi*((1:1:8000/dt)*dt)/8000));
+% modified to replace hard-coded number of time points
+% with value set in accordance with the number in zx
+% by A. Craig, 2022-08-26
+% The original code:
+% temp1 = abs(sin(m2*pi*((1:1:8000/dt)*dt)/8000));
+% for qw = 1:1:m2
+% z2(qw,:) = temp1.*((1:1:8000/dt)*dt<qw*8000/m2).*((1:1:8000/dt)*dt>(qw-1)*8000/m2);
+% end
+% 8000 (ms) is the hard-coded simulation time.
+% dt is the time step size.
+% 8000/dt then represents the number of time steps.
+% We can replace this with the actual number of time steps, nt.
+% Also, for the relational operators, < and >,
+% if we divide both sides by the same positive value,
+% the resulting vector of logical values remains the same.
+% Thus,
+% z2(qw,:) = temp1.*((1:1:8000/dt)*dt<qw*8000/m2).*((1:1:8000/dt)*dt>(qw-1)*8000/m2);
+% is equivalent to
+% z2(qw,:) = temp1.*(((1:1:8000/dt)*dt)/8000<qw/m2).*(((1:1:8000/dt)*dt)/8000>(qw-1)/m2);
+% Now, both lines
+% temp1 = abs(sin(m2*pi*((1:1:8000/dt)*dt)/8000));
+% and
+% z2(qw,:) = temp1.*(((1:1:8000/dt)*dt)/8000<qw/m2).*(((1:1:8000/dt)*dt)/8000>(qw-1)/m2);
+% contain the expression ((1:1:8000/dt)*dt)/8000,
+% which we can place in its own variable
+% z2_steps = ((1:1:8000/dt)*dt)/8000;
+% temp1 = abs(sin(m2*pi*z2_steps));
+% z2(qw,:) = temp1.*(z2_steps<qw/m2).*(z2_steps>(qw-1)/m2);
+% Now we can re-write z2_steps in terms of nt.
+% z2_steps = ((1:1:8000/dt)*dt)/8000
+%          = (1:1:8000/dt)/(8000/dt)
+%          = (1:1:nt)/nt;
+% The remaining variables, m2 and qw, depend on the number of channels,
+% not the total number of time steps.
+z2_steps = (1:1:nt)/nt;
+temp1 = abs(sin(m2*pi*z2_steps));
 for qw = 1:1:m2
-z2(qw,:) = temp1.*((1:1:8000/dt)*dt<qw*8000/m2).*((1:1:8000/dt)*dt>(qw-1)*8000/m2);
+z2(qw,:) = temp1.*(z2_steps<qw/m2).*(z2_steps>(qw-1)/m2);
 end
+% end of code edited by A. Craig
 %%
 dd(2) = max(size(zx));
 OMEGA =  G*(randn(N,N)).*(rand(N,N)<p)/(p*sqrt(N)); %Random weight matrix 
